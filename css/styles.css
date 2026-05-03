@@ -287,6 +287,10 @@ select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='ht
 
 .auth-confirm-info{background:var(--surface-2);border:1px solid var(--card-border);border-radius:12px;padding:16px;margin-top:20px;}
 
+/* GATE SCREEN */
+.gate-logo{width:180px;height:180px;object-fit:contain;margin:0 auto 8px;display:block;filter:drop-shadow(0 0 30px rgba(46,204,113,.25));}
+.gate-label{font-family:var(--font-h);font-size:17px;font-weight:600;color:var(--text-2);margin:16px 0 8px;}
+
 .auth-spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;}
 @keyframes spin{to{transform:rotate(360deg);}}
 

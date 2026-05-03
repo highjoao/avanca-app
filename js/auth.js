@@ -71,7 +71,7 @@ const Auth = {
 
         <div class="auth-footer">
           <span class="text-muted fs-14">Não tem conta?</span>
-          <button class="auth-link" onclick="Auth.showSignup()">Criar conta</button>
+          <button class="auth-link" onclick="Auth.showCodeGate()">Criar conta</button>
         </div>
       </div>
     `;
@@ -79,6 +79,46 @@ const Auth = {
     container.querySelectorAll('input').forEach(input => {
       input.addEventListener('keydown', e => { if (e.key === 'Enter') Auth.handleLogin(); });
     });
+  },
+
+  // ===== CODE GATE (access code required before signup) =====
+  _accessCode: 'pastor',
+
+  showCodeGate() {
+    const container = document.getElementById('auth-container');
+    container.classList.remove('hidden');
+    container.innerHTML = `
+      <div class="auth-card" style="text-align:center">
+        <img src="img/images.jpg" alt="Avança" class="gate-logo" />
+
+        <div id="auth-message" class="auth-message hidden"></div>
+
+        <p class="gate-label">Coloque o código de liberação</p>
+        <div class="form-group">
+          <input type="text" id="gate-code" placeholder="Código de acesso" autocomplete="off" style="text-align:center;font-size:18px;letter-spacing:2px"/>
+        </div>
+
+        <button class="btn btn-primary btn-block auth-btn" id="auth-submit" onclick="Auth.validateGateCode()">
+          Liberar acesso
+        </button>
+
+        <div class="auth-footer" style="margin-top:24px">
+          <button class="auth-link" onclick="Auth.showLogin()">← Voltar para login</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('gate-code').addEventListener('keydown', e => {
+      if (e.key === 'Enter') Auth.validateGateCode();
+    });
+    document.getElementById('gate-code').focus();
+  },
+
+  validateGateCode() {
+    const code = document.getElementById('gate-code')?.value?.trim().toLowerCase();
+    if (!code) { this.showMessage('Informe o código de liberação.'); return; }
+    if (code !== this._accessCode) { this.showMessage('Código inválido.'); return; }
+    // Code correct — proceed to signup
+    this.showSignup();
   },
 
   showSignup() {
@@ -201,8 +241,8 @@ const Auth = {
       const msg = err.message === 'Invalid login credentials'
         ? 'E-mail ou senha incorretos.'
         : err.message === 'Email not confirmed'
-        ? 'Confirme seu e-mail antes de entrar.'
-        : err.message || 'Erro ao fazer login.';
+          ? 'Confirme seu e-mail antes de entrar.'
+          : err.message || 'Erro ao fazer login.';
       this.showMessage(msg);
       this.setLoading(false);
     }
