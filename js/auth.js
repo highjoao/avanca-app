@@ -82,7 +82,7 @@ const Auth = {
   },
 
   // ===== CODE GATE (access code required before signup) =====
-  _accessCode: 'pastor',
+  _accessCode: 'pastor11',
 
   showCodeGate() {
     const container = document.getElementById('auth-container');
@@ -95,7 +95,7 @@ const Auth = {
 
         <p class="gate-label">Coloque o código de liberação</p>
         <div class="form-group">
-          <input type="text" id="gate-code" placeholder="Código de acesso" autocomplete="off" style="text-align:center;font-size:18px;letter-spacing:2px"/>
+          <input type="text" id="gate-code" placeholder="Void" autocomplete="off" style="text-align:center;font-size:12px;letter-spacing:0px"/>
         </div>
 
         <button class="btn btn-primary btn-block auth-btn" id="auth-submit" onclick="Auth.validateGateCode()">
@@ -113,11 +113,27 @@ const Auth = {
     document.getElementById('gate-code').focus();
   },
 
+  _gateAttempts: 0,
+  _gateMsgs: [
+    'kkkkkk tá de brincadeira né?',
+    'de novo?',
+    'Tenta pedir pro pastor te ajudar 👀',
+    'Esse código aí não existe amigão 😂',
+    'Desiste não, mas tá longe viu...',
+    'Última dica: pede a benção primeiro 🙏'
+  ],
+
   validateGateCode() {
     const code = document.getElementById('gate-code')?.value?.trim().toLowerCase();
     if (!code) { this.showMessage('Informe o código de liberação.'); return; }
-    if (code !== this._accessCode) { this.showMessage('Código inválido.'); return; }
-    // Code correct — proceed to signup
+    if (code !== this._accessCode) {
+      const msg = this._gateMsgs[this._gateAttempts % this._gateMsgs.length];
+      this._gateAttempts++;
+      this.showMessage(msg);
+      document.getElementById('gate-code').value = '';
+      return;
+    }
+    this._gateAttempts = 0;
     this.showSignup();
   },
 
