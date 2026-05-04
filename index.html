@@ -39,6 +39,15 @@
   </div>
 </header>
 
+<!-- Notification Panel -->
+<div id="notif-panel" class="notif-panel hidden">
+  <div class="notif-header">
+    <span class="fs-16 fw-600">Notificações</span>
+    <button class="btn btn-sm" onclick="App.clearNotifications()" style="padding:4px 10px;font-size:12px">Limpar</button>
+  </div>
+  <div id="notif-list"></div>
+</div>
+
 <!-- Main Content Area -->
 <main id="app-main" class="hidden">
   <div id="view-container"></div>

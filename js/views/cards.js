@@ -78,14 +78,31 @@ const CardsView = {
 
       <section class="summary-grid">
         ${UI.summaryCard('Fatura atual', Finance.currency(inv), 'text-secondary')}
-        ${UI.summaryCard('Limite', Finance.currency(c.limit))}
-        ${UI.summaryCard('Disponível', Finance.currency(c.limit-inv), 'text-success')}
+        ${UI.summaryCard('Limite', hasLimit ? Finance.currency(c.limit) : 'N/I')}
+        ${UI.summaryCard('Disponível', hasLimit ? Finance.currency(c.limit-inv) : 'N/I', hasLimit ? 'text-success' : '')}
         ${UI.summaryCard('Comprometido', Finance.currency(futureCommitted), 'text-warning')}
+      </section>
+
+      <!-- Pay Invoice -->
+      <section>
+        <button class="btn btn-secondary btn-block" onclick="CardsView.payInvoice('${c.id}')">${UI.icon('payments')} Pagar fatura atual</button>
       </section>
 
       <!-- Add expense button -->
       <section>
         <button class="btn btn-primary btn-block" onclick="CardsView.showExpenseForm('${c.id}')">${UI.icon('add')} Lançar gasto neste cartão</button>
+      </section>
+
+      <!-- Future invoices -->
+      <section>
+        <div class="section-header"><span class="section-title">Próximas faturas</span></div>
+        ${this.renderFutureInvoices(c)}
+      </section>
+
+      <!-- Invoice Chart -->
+      <section class="glass">
+        <div class="fs-14 fw-600 mb-8">Evolução das faturas</div>
+        <div class="chart-container" style="height:180px"><canvas id="invoice-chart"></canvas></div>
       </section>
 
       ${installments.length ? `<section>
@@ -257,14 +274,14 @@ const CardsView = {
       <h3 class="modal-title">Editar Cartão</h3>
       ${UI.formField('Nome','carded-name','text',{required:true, value:c.name})}
       ${UI.formField('Banco','carded-bank','text',{required:true, value:c.bank})}
-      ${UI.formField('Limite','carded-limit','currency',{required:true, value:c.limit.toFixed(2)})}
+      ${UI.formField('Limite','carded-limit','currency',{value:(c.limit||0).toFixed(2), placeholder:'Opcional'})}
       <div class="form-row">
         ${UI.formField('Dia fechamento','carded-closing','number',{required:true, min:'1', max:'31', value:c.closing})}
         ${UI.formField('Dia vencimento','carded-due','number',{required:true, min:'1', max:'31', value:c.due})}
       </div>
       <div class="form-group">
         <label class="form-label">Cor</label>
-        <div class="flex gap-8" style="flex-wrap:wrap">${colors.map(cl => `<button type="button" class="card-color-opt" data-color="${cl}" onclick="document.querySelectorAll('.card-color-opt').forEach(b=>b.style.outline='none');this.style.outline='2px solid white'" style="width:32px;height:32px;border-radius:8px;background:${cl};border:none;cursor:pointer;${cl===c.color?'outline:2px solid white':''}"></button>`).join('')}</div>
+        <div class="flex gap-8" style="flex-wrap:wrap">${colors.map(cl => `<button type="button" class="card-color-opt" data-color="${cl}" ${cl===c.color?'data-selected="true"':''} onclick="CardsView.selectColor(this)" style="width:32px;height:32px;border-radius:8px;background:${cl};border:none;cursor:pointer;${cl===c.color?'outline:2px solid white':''}"></button>`).join('')}</div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="UI.modal.hide()">Cancelar</button>
@@ -279,8 +296,8 @@ const CardsView = {
     const limit = UI.getCurrencyValue('carded-limit');
     const closing = UI.getNum('carded-closing');
     const due = UI.getNum('carded-due');
-    if (!name || !bank || !limit) { UI.toast('Preencha os campos','error'); return; }
-    const colorEl = document.querySelector('.card-color-opt[style*="outline: 2px"]') || document.querySelector('.card-color-opt');
+    if (!name || !bank) { UI.toast('Preencha os campos','error'); return; }
+    const colorEl = document.querySelector('.card-color-opt[data-selected]') || document.querySelector('.card-color-opt');
     const color = colorEl ? colorEl.dataset.color : '#8a2be2';
     DB.updateItem('cards', cardId, { name, bank, limit, closing, due, color });
     UI.modal.hide(); UI.toast('Cartão atualizado!'); App.refresh();
@@ -298,14 +315,14 @@ const CardsView = {
       <h3 class="modal-title">Novo Cartão</h3>
       ${UI.formField('Nome do cartão','card-name','text',{required:true, placeholder:'Ex: Nubank'})}
       ${UI.formField('Banco','card-bank','text',{required:true, placeholder:'Ex: Nubank'})}
-      ${UI.formField('Limite','card-limit','currency',{required:true})}
+      ${UI.formField('Limite','card-limit','currency',{placeholder:'Opcional'})}
       <div class="form-row">
         ${UI.formField('Dia de fechamento','card-closing','number',{required:true, min:'1', max:'31', placeholder:'Ex: 6'})}
         ${UI.formField('Dia de vencimento','card-due','number',{required:true, min:'1', max:'31', placeholder:'Ex: 15'})}
       </div>
       <div class="form-group">
         <label class="form-label">Cor</label>
-        <div class="flex gap-8" style="flex-wrap:wrap">${colors.map((cl,i) => `<button type="button" class="card-color-opt" data-color="${cl}" onclick="document.querySelectorAll('.card-color-opt').forEach(b=>b.style.outline='none');this.style.outline='2px solid white'" style="width:32px;height:32px;border-radius:8px;background:${cl};border:none;cursor:pointer;${i===0?'outline:2px solid white':''}"></button>`).join('')}</div>
+        <div class="flex gap-8" style="flex-wrap:wrap">${colors.map((cl,i) => `<button type="button" class="card-color-opt" data-color="${cl}" ${i===0?'data-selected="true"':''} onclick="CardsView.selectColor(this)" style="width:32px;height:32px;border-radius:8px;background:${cl};border:none;cursor:pointer;${i===0?'outline:2px solid white':''}"></button>`).join('')}</div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="UI.modal.hide()">Cancelar</button>
@@ -320,10 +337,96 @@ const CardsView = {
     const limit = UI.getCurrencyValue('card-limit');
     const closing = UI.getNum('card-closing');
     const due = UI.getNum('card-due');
-    const colorEl = document.querySelector('.card-color-opt[style*="outline: 2px"]') || document.querySelector('.card-color-opt');
+    const colorEl = document.querySelector('.card-color-opt[data-selected]') || document.querySelector('.card-color-opt');
     const color = colorEl ? colorEl.dataset.color : '#8a2be2';
-    if (!name || !bank || !limit || !closing || !due) { UI.toast('Preencha todos os campos','error'); return; }
-    DB.addItem('cards', { name, bank, limit, closing, due, color, obs: '' });
+    if (!name || !bank || !closing || !due) { UI.toast('Preencha nome, banco, fechamento e vencimento','error'); return; }
+    DB.addItem('cards', { name, bank, limit: limit || 0, closing, due, color, obs: '' });
     UI.modal.hide(); UI.toast('Cartão adicionado!'); App.refresh();
+  },
+
+  selectColor(btn) {
+    document.querySelectorAll('.card-color-opt').forEach(b => { b.removeAttribute('data-selected'); b.style.outline = 'none'; });
+    btn.setAttribute('data-selected', 'true');
+    btn.style.outline = '2px solid white';
+  },
+
+  // ===== PAY INVOICE =====
+  payInvoice(cardId) {
+    const c = DB.getItem('cards', cardId);
+    if (!c) return;
+    const inv = Finance.getCardInvoiceAmount(c);
+    UI.modal.show(`
+      <h3 class="modal-title">Pagar fatura - ${c.name}</h3>
+      <p class="fs-14 text-muted mb-8">Fatura atual: ${Finance.currency(inv)}</p>
+      ${UI.formField('Valor pago','inv-pay-amount','currency',{value:inv.toFixed(2)})}
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="UI.modal.hide()">Cancelar</button>
+        <button class="btn btn-primary flex-1" onclick="CardsView.saveInvoicePayment('${cardId}')">Confirmar</button>
+      </div>
+    `);
+  },
+
+  saveInvoicePayment(cardId) {
+    const c = DB.getItem('cards', cardId);
+    if (!c) return;
+    const amount = UI.getCurrencyValue('inv-pay-amount');
+    if (!amount || amount <= 0) { UI.toast('Informe o valor','error'); return; }
+    DB.addItem('expenses', {
+      name: 'Pagamento de fatura - ' + c.name, amount, date: Finance.today(),
+      payment: 'fatura', card: null, category: 'Cartão de crédito',
+      installments: null, desc: 'Fatura paga'
+    });
+    UI.modal.hide(); UI.toast('Fatura paga registrada!'); App.refresh();
+  },
+
+  // ===== FUTURE INVOICES =====
+  renderFutureInvoices(card) {
+    const now = new Date();
+    let html = '';
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const m = d.getMonth(), y = d.getFullYear();
+      const total = Finance.getCardInvoiceAmount(card, m, y);
+      const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      html += `<div class="glass glass-sm mb-8" style="cursor:pointer" onclick="CardsView.showInvoiceDetail('${card.id}',${m},${y})">
+        <div class="flex justify-between items-center">
+          <div><div class="fs-14 fw-500">${label}</div><div class="fs-11 text-muted mt-2">Vence dia ${card.due}</div></div>
+          <div class="font-h fs-16 fw-700 ${total > 0 ? 'text-warning' : 'text-muted'}">${total > 0 ? Finance.currency(total) : 'Sem gastos'}</div>
+        </div>
+      </div>`;
+    }
+    return html;
+  },
+
+  showInvoiceDetail(cardId, month, year) {
+    const c = DB.getItem('cards', cardId);
+    if (!c) return;
+    const inv = Finance.getCardInvoiceForMonth(c, month, year);
+    const d = new Date(year, month, 1);
+    const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    UI.modal.show(`
+      <h3 class="modal-title">Fatura de ${label}</h3>
+      <div class="flex justify-between mb-12"><span class="text-muted fs-14">Total</span><span class="fw-700 fs-18">${Finance.currency(inv.total)}</span></div>
+      ${inv.items.length === 0 ? '<div class="fs-13 text-muted">Nenhuma compra nesta fatura.</div>' :
+        inv.items.map(e => `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--card-border)">
+          <div><div class="fs-13 fw-500">${e.name}</div><div class="fs-11 text-muted">${e.category||''}${e.installmentN ? ' · Parcela '+e.installmentN+'/'+e.installments.total : ''}</div></div>
+          <span class="fs-14 fw-600 text-danger">${Finance.currency(e.invoiceAmount)}</span>
+        </div>`).join('')}
+      <div class="modal-actions mt-12"><button class="btn btn-secondary btn-block" onclick="UI.modal.hide()">Fechar</button></div>
+    `);
+  },
+
+  afterRender() {
+    const canvas = document.getElementById('invoice-chart');
+    if (!canvas || !this.selectedCard) return;
+    const c = DB.getItem('cards', this.selectedCard);
+    if (!c) return;
+    const timeline = Finance.getCardInvoiceTimeline(c, 2, 4);
+    const bgColors = timeline.map(t => t.isCurrent ? '#4da3ff' : 'rgba(77,163,255,0.3)');
+    new Chart(canvas, {
+      type: 'bar',
+      data: { labels: timeline.map(t => t.label), datasets: [{ data: timeline.map(t => t.total), backgroundColor: bgColors, borderRadius: 6, borderSkipped: false }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { callback: v => Finance.shortCurrency(v) } } } }
+    });
   }
 };

@@ -27,7 +27,7 @@ const ExpensesView = {
           expenses.map(e => {
             const icon = e.payment==='credit'?'credit_card':e.payment==='pix'?'pix':e.payment==='debit'?'account_balance':'payments';
             const card = e.card ? data.cards.find(c=>c.id===e.card) : null;
-            const sub = `${e.category} · ${e.payment==='credit'&&card?card.name:e.payment}${e.installments?` · ${e.installments.current}/${e.installments.total}x`:''}`;
+            const sub = `${e.category} · ${e.payment==='credit'&&card?card.name:Finance.paymentLabel(e.payment)}${e.installments?` · ${e.installments.current}/${e.installments.total}x`:''}`;
             return UI.listItem(icon, e.payment==='credit'?'accent':'secondary', e.name, sub, '- '+Finance.currency(e.installments?e.installments.amount:e.amount), 'text-danger', Finance.dateStr(e.date), `ExpensesView.showDetail('${e.id}')`);
           }).join('')}
       </section>
@@ -58,7 +58,7 @@ const ExpensesView = {
       <div class="flex flex-col gap-10">
         <div class="flex justify-between"><span class="text-muted fs-14">Valor</span><span class="fw-600 text-danger">${Finance.currency(e.amount)}</span></div>
         <div class="flex justify-between"><span class="text-muted fs-14">Data</span><span class="fw-500">${Finance.dateFull(e.date)}</span></div>
-        <div class="flex justify-between"><span class="text-muted fs-14">Pagamento</span><span class="fw-500">${e.payment}${card?' · '+card.name:''}</span></div>
+        <div class="flex justify-between"><span class="text-muted fs-14">Pagamento</span><span class="fw-500">${Finance.paymentLabel(e.payment)}${card?' · '+card.name:''}</span></div>
         <div class="flex justify-between"><span class="text-muted fs-14">Categoria</span><span class="fw-500">${e.category}</span></div>
         ${e.installments?`<div class="flex justify-between"><span class="text-muted fs-14">Parcelas</span><span class="fw-500">${e.installments.current}/${e.installments.total}x de ${Finance.currency(e.installments.amount)}</span></div>`:''}
         ${e.desc?`<div class="flex justify-between"><span class="text-muted fs-14">Obs</span><span class="fw-500">${e.desc}</span></div>`:''}
@@ -82,7 +82,7 @@ const ExpensesView = {
         ${UI.formField('Valor','expe-amount','currency',{required:true, value:e.amount.toFixed(2)})}
         ${UI.formField('Data','expe-date','date',{required:true, value:e.date})}
       </div>
-      ${UI.formField('Forma de pagamento','expe-payment','select',{options:['dinheiro','pix','debit','credit'], value:e.payment})}
+      ${UI.formField('Forma de pagamento','expe-payment','select',{options:[{value:'dinheiro',label:'Dinheiro'},{value:'pix',label:'PIX'},{value:'debit',label:'Débito'},{value:'credit',label:'Crédito'}], value:e.payment})}
       <div id="expe-card-wrap" class="${e.payment!=='credit'?'hidden':''}">
         ${UI.formField('Cartão','expe-card','select',{options:data.cards.map(c=>({value:c.id,label:c.name})), value:e.card||''})}
         <div class="form-row">
@@ -140,7 +140,7 @@ const ExpensesView = {
         ${UI.formField('Valor','exp-amount','currency',{required:true})}
         ${UI.formField('Data','exp-date','date',{required:true, value:Finance.today()})}
       </div>
-      ${UI.formField('Forma de pagamento','exp-payment','select',{options:['dinheiro','pix','debit','credit']})}
+      ${UI.formField('Forma de pagamento','exp-payment','select',{options:[{value:'dinheiro',label:'Dinheiro'},{value:'pix',label:'PIX'},{value:'debit',label:'Débito'},{value:'credit',label:'Crédito'}]})}
       <div id="exp-card-wrap" class="hidden">
         ${UI.formField('Cartão','exp-card','select',{options:data.cards.map(c=>({value:c.id,label:c.name}))})}
         <div class="form-row">
@@ -148,7 +148,7 @@ const ExpensesView = {
           ${UI.formField('Parcela atual','exp-inst-current','number',{placeholder:'Atual (para compras antigas)', min:'1'})}
         </div>
       </div>
-      ${UI.formField('Categoria','exp-category','select',{options:data.categories})}
+      ${UI.formField('Categoria','exp-category','select',{options:[...data.categories, '+ Nova categoria']})}
       ${UI.formField('Observação','exp-desc','text',{placeholder:'Opcional'})}
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="UI.modal.hide()">Cancelar</button>
@@ -157,6 +157,17 @@ const ExpensesView = {
     `);
     document.getElementById('exp-payment').onchange = function() {
       document.getElementById('exp-card-wrap').classList.toggle('hidden', this.value !== 'credit');
+    };
+    document.getElementById('exp-category').onchange = function() {
+      if (this.value === '+ Nova categoria') {
+        const name = prompt('Nome da nova categoria:');
+        if (name && name.trim()) {
+          const d = DB.get();
+          if (!d.categories.includes(name.trim())) { d.categories.push(name.trim()); DB.save(d); }
+          const opt = document.createElement('option'); opt.value = name.trim(); opt.textContent = name.trim(); opt.selected = true;
+          this.insertBefore(opt, this.lastElementChild);
+        } else { this.selectedIndex = 0; }
+      }
     };
   },
 

@@ -1,20 +1,30 @@
 /* ===== DASHBOARD VIEW ===== */
 const DashboardView = {
+  dateFilter: 'current-month',
+
   render() {
     const data = DB.get();
-    const expenses = data.expenses, incomes = data.incomes, cards = data.cards, recv = data.receivables, goals = data.goals, tasks = data.tasks;
+    const fk = this.dateFilter;
+
+    // Filter by date
+    const expenses = Finance.filterByDate(data.expenses, fk);
+    const incomes = Finance.filterByDate(data.incomes, fk);
+    const recv = data.receivables, cards = data.cards, goals = data.goals, tasks = data.tasks;
+
+    // Separate credit from real cash expenses
+    const cashExpenses = expenses.filter(e => e.payment !== 'credit');
+    const creditExpenses = expenses.filter(e => e.payment === 'credit');
     const totalIncome = incomes.reduce((s,i) => s + i.amount, 0);
-    const totalExpense = expenses.reduce((s,e) => s + e.amount, 0);
-    const balance = totalIncome - totalExpense;
-    const healthPct = totalIncome > 0 ? Finance.percent(totalExpense, totalIncome) : 0;
+    const totalCashExpense = cashExpenses.reduce((s,e) => s + e.amount, 0);
+    const totalCreditExpense = creditExpenses.reduce((s,e) => e.installments ? s + e.installments.amount : s + e.amount, 0);
+    const balance = totalIncome - totalCashExpense;
+    const healthPct = totalIncome > 0 ? Finance.percent(totalCashExpense, totalIncome) : 0;
 
     // Cards summary
-    let totalInvoice = 0, totalLimit = 0, totalUsed = 0;
+    let totalInvoice = 0, totalLimit = 0;
     cards.forEach(c => {
-      totalLimit += c.limit;
-      const inv = Finance.getCardInvoiceAmount(c);
-      totalInvoice += inv;
-      totalUsed += inv;
+      if (c.limit) totalLimit += c.limit;
+      totalInvoice += Finance.getCardInvoiceAmount(c);
     });
 
     // Receivables summary
@@ -34,14 +44,20 @@ const DashboardView = {
     // Today tasks
     const todayStr = Finance.today();
     const todayTasks = tasks.filter(t => t.date === todayStr);
-    const pendingTasks = todayTasks.filter(t => t.status === 'pending');
 
     // Alerts
     const alerts = this.generateAlerts(data);
 
+    // Update notification badge
+    const badgeEl = document.getElementById('notif-badge');
+    if (badgeEl) {
+      badgeEl.textContent = alerts.length;
+      badgeEl.style.display = alerts.length > 0 ? '' : 'none';
+    }
+
     // Health message
     let healthMsg, healthCls;
-    if (balance > 0) { healthMsg = `Seu saldo este mês está positivo em ${Finance.currency(balance)}`; healthCls = 'text-success'; }
+    if (balance > 0) { healthMsg = `Seu saldo este período está positivo em ${Finance.currency(balance)}`; healthCls = 'text-success'; }
     else if (balance === 0) { healthMsg = 'Seus gastos estão iguais aos ganhos.'; healthCls = 'text-warning'; }
     else { healthMsg = `Atenção: você gastou ${Finance.currency(Math.abs(balance))} a mais do que ganhou.`; healthCls = 'text-danger'; }
 
@@ -50,11 +66,38 @@ const DashboardView = {
       healthMsg += ` Suas faturas comprometem ${invoicePct}% da sua renda.`;
     }
 
+    // Date filter options
+    const now = new Date();
+    const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const curMonth = now.getMonth();
+    const filterOptions = [
+      { key: 'current-month', label: monthNames[curMonth] + ' (atual)' },
+      { key: `month-${(curMonth - 1 + 12) % 12}`, label: monthNames[(curMonth - 1 + 12) % 12] },
+      { key: `month-${(curMonth + 1) % 12}`, label: monthNames[(curMonth + 1) % 12] },
+      { key: 'last-7', label: 'Últimos 7 dias' },
+      { key: 'last-15', label: 'Últimos 15 dias' },
+      { key: 'last-30', label: 'Últimos 30 dias' },
+      { key: 'last-3months', label: 'Últimos 3 meses' },
+    ];
+
     return `
       <section>
         <h2 class="font-h fs-24 fw-700">Olá, ${data.user.name}</h2>
         <p class="fs-14 text-muted mt-4">Sua visão geral de hoje</p>
       </section>
+
+      <!-- Date Filter -->
+      <div class="date-filter-bar">
+        <button class="date-filter-btn" onclick="DashboardView.toggleFilterMenu()">
+          ${UI.icon('calendar_month','fs-16')}
+          <span>${Finance.getFilterLabel(fk)}</span>
+          ${UI.icon('expand_more','fs-16')}
+        </button>
+        <div class="date-filter-menu hidden" id="dash-filter-menu">
+          ${filterOptions.map(o => `<button class="date-filter-opt ${o.key === fk ? 'active' : ''}" onclick="DashboardView.setDateFilter('${o.key}')">${o.label}</button>`).join('')}
+          <button class="date-filter-opt" onclick="DashboardView.showCustomRange()">Período personalizado</button>
+        </div>
+      </div>
 
       <!-- Health Card -->
       <section class="glass" style="position:relative;overflow:hidden">
@@ -74,12 +117,24 @@ const DashboardView = {
           </div>
           <div>
             <div class="flex items-center gap-4"><div style="width:8px;height:8px;border-radius:50%;background:var(--danger)"></div><span class="fs-11 text-muted">Gastos</span></div>
-            <div class="font-h fs-18 fw-600 mt-4">${Finance.currency(totalExpense)}</div>
+            <div class="font-h fs-18 fw-600 mt-4">${Finance.currency(totalCashExpense)}</div>
           </div>
         </div>
         ${UI.progress(healthPct, healthPct > 80 ? 'danger' : healthPct > 60 ? 'warning' : 'green', true)}
         <p class="fs-12 text-muted mt-8" style="line-height:1.4;position:relative;z-index:1">${healthMsg}</p>
       </section>
+
+      <!-- Credit Card Spending (separate) -->
+      ${totalCreditExpense > 0 ? `<section class="glass glass-sm" style="border-left:3px solid var(--secondary)">
+        <div class="flex justify-between items-center">
+          <div>
+            <div class="fs-11 text-muted">GASTOS EM CARTÕES DE CRÉDITO</div>
+            <div class="font-h fs-20 fw-700 mt-4 text-secondary">${Finance.currency(totalCreditExpense)}</div>
+          </div>
+          <div class="icon-box accent">${UI.icon('credit_card')}</div>
+        </div>
+        <div class="fs-11 text-muted mt-4">Não afeta o saldo — entra na fatura do cartão</div>
+      </section>` : ''}
 
       <!-- Cards Summary -->
       <section>
@@ -150,16 +205,60 @@ const DashboardView = {
           <div class="icon-box accent">${UI.icon('auto_awesome')}</div>
           <div>
             <div class="fs-14 fw-600" style="color:var(--accent)">Insight do dia</div>
-            <p class="fs-12 text-muted mt-4" style="line-height:1.5">${this.getInsight(data)}</p>
+            <p class="fs-12 text-muted mt-4" style="line-height:1.5">${this.getInsight(data, totalIncome, totalCashExpense)}</p>
           </div>
         </div>
       </section>
     `;
   },
 
+  // ===== Date Filter =====
+  toggleFilterMenu() {
+    const menu = document.getElementById('dash-filter-menu');
+    menu.classList.toggle('hidden');
+    // Close on outside click
+    if (!menu.classList.contains('hidden')) {
+      setTimeout(() => {
+        const close = (e) => { if (!menu.contains(e.target)) { menu.classList.add('hidden'); document.removeEventListener('click', close); } };
+        document.addEventListener('click', close);
+      }, 10);
+    }
+  },
+
+  setDateFilter(key) {
+    this.dateFilter = key;
+    document.getElementById('dash-filter-menu')?.classList.add('hidden');
+    App.refresh();
+  },
+
+  showCustomRange() {
+    document.getElementById('dash-filter-menu')?.classList.add('hidden');
+    UI.modal.show(`
+      <h3 class="modal-title">Período personalizado</h3>
+      <div class="form-row">
+        ${UI.formField('De','custom-start','date',{required:true, value:Finance.today()})}
+        ${UI.formField('Até','custom-end','date',{required:true, value:Finance.today()})}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="UI.modal.hide()">Cancelar</button>
+        <button class="btn btn-primary flex-1" onclick="DashboardView.applyCustomRange()">Aplicar</button>
+      </div>
+    `);
+  },
+
+  applyCustomRange() {
+    const start = UI.getVal('custom-start');
+    const end = UI.getVal('custom-end');
+    if (!start || !end) { UI.toast('Selecione as datas','error'); return; }
+    this.dateFilter = `custom-${start}_${end}`;
+    UI.modal.hide();
+    App.refresh();
+  },
+
   renderCardMini(c) {
     const inv = Finance.getCardInvoiceAmount(c);
-    const usedPct = Finance.percent(inv, c.limit);
+    const hasLimit = c.limit && c.limit > 0;
+    const usedPct = hasLimit ? Finance.percent(inv, c.limit) : 0;
     return `<div class="glass glass-sm shrink-0" style="min-width:240px;cursor:pointer" onclick="App.navigate('cards')">
       <div style="position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;background:${c.color}22"></div>
       <div class="flex justify-between items-center" style="position:relative;z-index:1">
@@ -167,8 +266,8 @@ const DashboardView = {
         ${UI.icon('credit_card', 'fs-18')}
       </div>
       <div class="font-h fs-20 fw-700 mt-8" style="position:relative;z-index:1">${Finance.currency(inv)}</div>
-      <div class="fs-11 text-muted mt-4">Limite: ${Finance.currency(c.limit)}</div>
-      ${UI.progress(usedPct, usedPct > 80 ? 'danger' : usedPct > 50 ? 'warning' : 'blue')}
+      <div class="fs-11 text-muted mt-4">${hasLimit ? 'Limite: ' + Finance.currency(c.limit) : 'Limite não informado'}</div>
+      ${hasLimit ? UI.progress(usedPct, usedPct > 80 ? 'danger' : usedPct > 50 ? 'warning' : 'blue') : ''}
     </div>`;
   },
 
@@ -190,7 +289,9 @@ const DashboardView = {
         const dueDate = new Date(now.getFullYear(), now.getMonth(), c.due);
         const days = Finance.daysUntil(dueDate.toISOString().split('T')[0]);
         if (days >= 0 && days <= 5) alerts.push(UI.alertItem(`Sua fatura ${c.name} vence em ${days} dias. Valor: ${Finance.currency(inv)}`, 'warn', 'credit_card'));
+        if (days < 0) alerts.push(UI.alertItem(`Fatura ${c.name} está vencida! Valor: ${Finance.currency(inv)}`, 'danger', 'credit_card'));
       }
+      if (c.limit && inv > c.limit * 0.8) alerts.push(UI.alertItem(`Cartão ${c.name} está com ${Finance.percent(inv, c.limit)}% do limite utilizado.`, 'warn', 'credit_card'));
     });
     data.receivables.forEach(r => {
       const t = Finance.getReceivableTotal(r);
@@ -198,10 +299,18 @@ const DashboardView = {
         alerts.push(UI.alertItem(`${r.person} está com pagamento atrasado há ${Finance.daysSince(r.dueDate)} dias. Total: ${Finance.currency(t.total)}`, 'danger', 'person'));
       }
     });
+    data.goals.forEach(g => {
+      if (g.endDate && Finance.daysUntil(g.endDate) >= 0 && Finance.daysUntil(g.endDate) <= 7 && g.current < g.target) {
+        alerts.push(UI.alertItem(`Meta "${g.name}" vence em ${Finance.daysUntil(g.endDate)} dias.`, 'warn', 'flag'));
+      }
+    });
+    data.tasks.forEach(t => {
+      if (t.date && t.status === 'pending' && Finance.daysUntil(t.date) < 0) {
+        alerts.push(UI.alertItem(`Tarefa "${t.name}" está atrasada.`, 'warn', 'task_alt'));
+      }
+    });
     const totalRecv7 = data.receivables.filter(r => { const d = Finance.daysUntil(r.dueDate); return d >= 0 && d <= 7 && Finance.getReceivableTotal(r).total > 0; }).reduce((s,r) => s + Finance.getReceivableTotal(r).total, 0);
     if (totalRecv7 > 0) alerts.push(UI.alertItem(`Você tem ${Finance.currency(totalRecv7)} para receber nos próximos 7 dias.`, 'info', 'payments'));
-    const topCat = this.topCategory(data.expenses);
-    if (topCat) alerts.push(UI.alertItem(`Sua maior categoria de gasto é ${topCat.name} (${Finance.currency(topCat.total)}).`, 'info', 'category'));
     return alerts;
   },
 
@@ -212,14 +321,12 @@ const DashboardView = {
     return sorted.length ? { name: sorted[0][0], total: sorted[0][1] } : null;
   },
 
-  getInsight(data) {
+  getInsight(data, totalIncome, totalExpense) {
     const insights = [
-      `Você registrou ${data.expenses.length} gastos e ${data.incomes.length} ganhos este período.`,
+      `Você registrou ${data.expenses.length} gastos e ${data.incomes.length} ganhos neste período.`,
       `Mantenha o controle diário para ter clareza total sobre seu dinheiro.`,
       `Revisar suas cobranças semanalmente ajuda a não perder prazos.`,
     ];
-    const totalIncome = data.incomes.reduce((s,i) => s + i.amount, 0);
-    const totalExpense = data.expenses.reduce((s,e) => s + e.amount, 0);
     if (totalIncome > totalExpense) insights.unshift(`Parabéns! Seu saldo está positivo. Continue assim para alcançar suas metas mais rápido.`);
     else insights.unshift(`Seus gastos superaram os ganhos. Revise suas categorias e identifique onde pode economizar.`);
     return insights[0];

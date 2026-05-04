@@ -219,20 +219,147 @@ const Finance = {
     return DB.get().expenses.filter(e => e.card === cardId);
   },
 
-  getCardInvoiceAmount(card) {
+  getCardInvoiceAmount(card, targetMonth, targetYear) {
     const expenses = this.getCardExpenses(card.id);
-    let total = 0;
     const now = new Date();
+    const m = targetMonth !== undefined ? targetMonth : now.getMonth();
+    const y = targetYear !== undefined ? targetYear : now.getFullYear();
+    let total = 0;
     expenses.forEach(e => {
       if (e.installments) {
-        total += e.installments.amount;
+        // installment: check if any installment falls in this month
+        const inst = e.installments;
+        const purchaseDate = new Date(e.date + 'T12:00:00');
+        for (let i = inst.current - 1; i < inst.total; i++) {
+          const d = new Date(purchaseDate);
+          d.setMonth(d.getMonth() + (i - (inst.current - 1)));
+          const invM = this.getInvoiceMonth(card.closing, d.toISOString().split('T')[0]);
+          if (invM.month === m && invM.year === y) { total += inst.amount; break; }
+        }
       } else {
         const inv = this.getInvoiceMonth(card.closing, e.date);
-        if (inv.month === now.getMonth() && inv.year === now.getFullYear()) {
-          total += e.amount;
-        }
+        if (inv.month === m && inv.year === y) total += e.amount;
       }
     });
     return total;
+  },
+
+  getCardInvoiceForMonth(card, month, year) {
+    const expenses = this.getCardExpenses(card.id);
+    const items = [];
+    expenses.forEach(e => {
+      if (e.installments) {
+        const inst = e.installments;
+        const purchaseDate = new Date(e.date + 'T12:00:00');
+        for (let i = inst.current - 1; i < inst.total; i++) {
+          const d = new Date(purchaseDate);
+          d.setMonth(d.getMonth() + (i - (inst.current - 1)));
+          const invM = this.getInvoiceMonth(card.closing, d.toISOString().split('T')[0]);
+          if (invM.month === month && invM.year === year) {
+            items.push({ ...e, invoiceAmount: inst.amount, installmentN: i + 1 });
+            break;
+          }
+        }
+      } else {
+        const inv = this.getInvoiceMonth(card.closing, e.date);
+        if (inv.month === month && inv.year === year) items.push({ ...e, invoiceAmount: e.amount });
+      }
+    });
+    const total = items.reduce((s, i) => s + i.invoiceAmount, 0);
+    return { items, total };
+  },
+
+  getCardInvoiceTimeline(card, monthsBefore, monthsAfter) {
+    const before = monthsBefore || 2;
+    const after = monthsAfter || 4;
+    const now = new Date();
+    const timeline = [];
+    for (let i = -before; i <= after; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const m = d.getMonth(), y = d.getFullYear();
+      const total = this.getCardInvoiceAmount(card, m, y);
+      const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+      const isCurrent = i === 0;
+      timeline.push({ month: m, year: y, total, label, isCurrent });
+    }
+    return timeline;
+  },
+
+  // ===== DATE FILTER =====
+  filterByDate(items, filterKey, dateField) {
+    dateField = dateField || 'date';
+    const now = new Date();
+    const thisYear = now.getFullYear();
+    const thisMonth = now.getMonth();
+    let start, end;
+
+    switch (filterKey) {
+      case 'current-month':
+        start = new Date(thisYear, thisMonth, 1);
+        end = new Date(thisYear, thisMonth + 1, 0, 23, 59, 59);
+        break;
+      case 'last-7':
+        start = new Date(now); start.setDate(start.getDate() - 7); start.setHours(0,0,0,0);
+        end = new Date(now); end.setHours(23,59,59);
+        break;
+      case 'last-15':
+        start = new Date(now); start.setDate(start.getDate() - 15); start.setHours(0,0,0,0);
+        end = new Date(now); end.setHours(23,59,59);
+        break;
+      case 'last-30':
+        start = new Date(now); start.setDate(start.getDate() - 30); start.setHours(0,0,0,0);
+        end = new Date(now); end.setHours(23,59,59);
+        break;
+      case 'last-3months':
+        start = new Date(thisYear, thisMonth - 2, 1);
+        end = new Date(thisYear, thisMonth + 1, 0, 23, 59, 59);
+        break;
+      default:
+        // Month number (0-11): e.g. "month-0" = January
+        if (filterKey && filterKey.startsWith('month-')) {
+          const m = parseInt(filterKey.split('-')[1]);
+          start = new Date(thisYear, m, 1);
+          end = new Date(thisYear, m + 1, 0, 23, 59, 59);
+          break;
+        }
+        // Custom range: "custom-YYYY-MM-DD_YYYY-MM-DD"
+        if (filterKey && filterKey.startsWith('custom-')) {
+          const parts = filterKey.replace('custom-', '').split('_');
+          start = new Date(parts[0] + 'T00:00:00');
+          end = new Date(parts[1] + 'T23:59:59');
+          break;
+        }
+        // Default: current month
+        start = new Date(thisYear, thisMonth, 1);
+        end = new Date(thisYear, thisMonth + 1, 0, 23, 59, 59);
+    }
+
+    return items.filter(item => {
+      if (!item[dateField]) return false;
+      const d = new Date(item[dateField] + 'T12:00:00');
+      return d >= start && d <= end;
+    });
+  },
+
+  getFilterLabel(filterKey) {
+    const now = new Date();
+    const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    switch (filterKey) {
+      case 'current-month': return months[now.getMonth()];
+      case 'last-7': return 'Últimos 7 dias';
+      case 'last-15': return 'Últimos 15 dias';
+      case 'last-30': return 'Últimos 30 dias';
+      case 'last-3months': return 'Últimos 3 meses';
+      default:
+        if (filterKey && filterKey.startsWith('month-')) {
+          return months[parseInt(filterKey.split('-')[1])];
+        }
+        if (filterKey && filterKey.startsWith('custom-')) return 'Personalizado';
+        return months[now.getMonth()];
+    }
+  },
+
+  paymentLabel(p) {
+    return { credit:'Crédito', debit:'Débito', pix:'PIX', dinheiro:'Dinheiro', fatura:'Pagto. Fatura' }[p] || p;
   }
 };

@@ -60,6 +60,7 @@ const App = {
       // Setup navigation (only once)
       if (!this._navInitialized) {
         this.setupNav();
+        document.getElementById('btn-notifications').addEventListener('click', () => App.toggleNotifications());
         this._navInitialized = true;
       }
 
@@ -193,12 +194,40 @@ const App = {
 
   // ===== LOGOUT =====
   async logout() {
-    await DB.flushSync(); // Save any pending changes
+    await DB.flushSync();
     DB.clear();
     await Auth.signOut();
     this.hideApp();
     this._navInitialized = false;
     Auth.showLogin();
+  },
+
+  // ===== NOTIFICATIONS =====
+  toggleNotifications() {
+    const panel = document.getElementById('notif-panel');
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) {
+      this.renderNotifications();
+    }
+  },
+
+  renderNotifications() {
+    const data = DB.get();
+    const alerts = DashboardView.generateAlerts(data);
+    const list = document.getElementById('notif-list');
+    if (alerts.length === 0) {
+      list.innerHTML = '<div class="fs-13 text-muted" style="padding:20px;text-align:center">Nenhuma notificação.</div>';
+    } else {
+      list.innerHTML = alerts.join('');
+    }
+    const badge = document.getElementById('notif-badge');
+    if (badge) { badge.textContent = alerts.length; badge.style.display = alerts.length > 0 ? '' : 'none'; }
+  },
+
+  clearNotifications() {
+    document.getElementById('notif-list').innerHTML = '<div class="fs-13 text-muted" style="padding:20px;text-align:center">Notificações limpas.</div>';
+    const badge = document.getElementById('notif-badge');
+    if (badge) badge.style.display = 'none';
   },
 
   // ===== ONBOARDING =====

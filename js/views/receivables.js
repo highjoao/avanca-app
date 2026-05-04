@@ -174,18 +174,32 @@ const ReceivablesView = {
     if (t.total <= 0) r.status = 'paid';
     else if (r.paid > 0) r.status = 'partial';
     DB.updateItem('receivables', id, r);
+    // Auto-create income
+    DB.addItem('incomes', {
+      source: r.type === 'installment' ? `Recebimento de parcela - ${r.person}` : `Ganho recebido de ${r.person}`,
+      amount, date: Finance.today(), desc: r.product || '',
+      category: 'Recebimento', fromReceivable: id
+    });
     UI.modal.hide(); UI.toast('Pagamento registrado!'); App.refresh();
   },
 
   payInstallment(recvId, instIndex) {
     const r = DB.getItem('receivables', recvId);
     if (!r || !r.installments || !r.installments[instIndex]) return;
+    const instAmount = r.installments[instIndex].amount;
     r.installments[instIndex].status = 'paid';
-    r.installments[instIndex].paidAmount = r.installments[instIndex].amount;
+    r.installments[instIndex].paidAmount = instAmount;
     r.installments[instIndex].paidDate = Finance.today();
-    r.paid = (r.paid || 0) + r.installments[instIndex].amount;
+    r.paid = (r.paid || 0) + instAmount;
     if (r.installments.every(i => i.status === 'paid')) r.status = 'paid';
     DB.updateItem('receivables', recvId, r);
+    // Auto-create income
+    DB.addItem('incomes', {
+      source: `Recebimento de parcela - ${r.person}`,
+      amount: instAmount, date: Finance.today(),
+      desc: `Parcela ${r.installments[instIndex].n}`,
+      category: 'Recebimento', fromReceivable: recvId
+    });
     UI.toast('Parcela marcada como paga!'); App.refresh();
   },
 
