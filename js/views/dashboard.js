@@ -259,7 +259,7 @@ const DashboardView = {
     const inv = Finance.getCardInvoiceAmount(c);
     const hasLimit = c.limit && c.limit > 0;
     const usedPct = hasLimit ? Finance.percent(inv, c.limit) : 0;
-    return `<div class="glass glass-sm shrink-0" style="min-width:240px;cursor:pointer" onclick="App.navigate('cards')">
+    return `<div class="glass glass-sm shrink-0" style="min-width:240px;cursor:pointer" onclick="App.navigate('cards', '${c.id}')">
       <div style="position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;background:${c.color}22"></div>
       <div class="flex justify-between items-center" style="position:relative;z-index:1">
         <span class="fs-14 fw-600">${c.name}</span>

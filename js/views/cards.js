@@ -56,7 +56,8 @@ const CardsView = {
     if (!c) { this.selectedCard = null; return this.render(); }
     const expenses = data.expenses.filter(e => e.card === cardId).sort((a,b) => b.date.localeCompare(a.date));
     const inv = Finance.getCardInvoiceAmount(c);
-    const usedPct = Finance.percent(inv, c.limit);
+    const hasLimit = c.limit && c.limit > 0;
+    const usedPct = hasLimit ? Finance.percent(inv, c.limit) : 0;
     const installments = expenses.filter(e => e.installments);
     let futureCommitted = 0;
     installments.forEach(e => { if(e.installments) futureCommitted += e.installments.amount * (e.installments.total - e.installments.current); });
@@ -83,20 +84,30 @@ const CardsView = {
         ${UI.summaryCard('Comprometido', Finance.currency(futureCommitted), 'text-warning')}
       </section>
 
-      <!-- Pay Invoice -->
-      <section>
-        <button class="btn btn-secondary btn-block" onclick="CardsView.payInvoice('${c.id}')">${UI.icon('payments')} Pagar fatura atual</button>
-      </section>
-
-      <!-- Add expense button -->
       <section>
         <button class="btn btn-primary btn-block" onclick="CardsView.showExpenseForm('${c.id}')">${UI.icon('add')} Lançar gasto neste cartão</button>
       </section>
 
-      <!-- Future invoices -->
       <section>
-        <div class="section-header"><span class="section-title">Próximas faturas</span></div>
-        ${this.renderFutureInvoices(c)}
+        <div class="section-header mb-8"><span class="font-h fs-18 fw-700">Faturas</span></div>
+        
+        <div class="glass mb-8">
+          <div class="fs-13 text-muted mb-4">Fatura atual</div>
+          <div class="flex justify-between items-center">
+            <div class="font-h fs-20 fw-700 ${inv > 0 ? 'text-danger' : ''}">${Finance.currency(inv)}</div>
+            ${inv > 0 ? `<button class="btn btn-secondary btn-sm" onclick="CardsView.payInvoice('${c.id}')">Pagar</button>` : '<span class="fs-12 text-success">Fechada/Sem gastos</span>'}
+          </div>
+        </div>
+
+        <div class="mb-12">
+          <div class="fs-14 fw-600 mb-8">Próximas faturas</div>
+          ${this.renderFutureInvoices(c)}
+        </div>
+
+        <div>
+          <div class="fs-14 fw-600 mb-8">Histórico (Pagas)</div>
+          ${this.renderInvoiceHistory(c, data)}
+        </div>
       </section>
 
       <!-- Invoice Chart -->
@@ -373,7 +384,7 @@ const CardsView = {
     if (!amount || amount <= 0) { UI.toast('Informe o valor','error'); return; }
     DB.addItem('expenses', {
       name: 'Pagamento de fatura - ' + c.name, amount, date: Finance.today(),
-      payment: 'fatura', card: null, category: 'Cartão de crédito',
+      payment: 'fatura', card: cardId, category: 'Cartão de crédito',
       installments: null, desc: 'Fatura paga'
     });
     UI.modal.hide(); UI.toast('Fatura paga registrada!'); App.refresh();
@@ -396,6 +407,20 @@ const CardsView = {
       </div>`;
     }
     return html;
+  },
+
+  renderInvoiceHistory(card, data) {
+    const pastInvoices = data.expenses.filter(e => e.card === card.id && e.payment === 'fatura').sort((a,b) => b.date.localeCompare(a.date));
+    if (pastInvoices.length === 0) return '<div class="fs-13 text-muted">Nenhum pagamento registrado.</div>';
+    
+    return pastInvoices.map(e => `
+      <div class="glass glass-sm mb-8" style="cursor:pointer" onclick="CardsView.showExpenseDetail('${e.id}')">
+        <div class="flex justify-between items-center">
+          <div><div class="fs-14 fw-500">${Finance.dateFull(e.date)}</div><div class="fs-11 text-success mt-2">Paga</div></div>
+          <div class="font-h fs-16 fw-700 text-danger">- ${Finance.currency(e.amount)}</div>
+        </div>
+      </div>
+    `).join('');
   },
 
   showInvoiceDetail(cardId, month, year) {

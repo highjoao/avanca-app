@@ -44,10 +44,17 @@ const App = {
 
   // Called after successful auth
   async onAuthSuccess() {
+    if (this._isLoadingAuth) return;
+    this._isLoadingAuth = true;
     this.showLoading();
     try {
+      // Validate session actively on the server to prevent expired tokens
+      const { data: { user }, error } = await supabaseClient.auth.getUser();
+      if (error || !user) throw new Error('Session expired');
+      Auth.currentUser = user;
+
       // Load user data from Supabase
-      await DB.init(Auth.currentUser.id);
+      await DB.init(user.id);
 
       // Set user avatar
       const data = DB.get();
@@ -74,7 +81,10 @@ const App = {
     } catch (err) {
       console.error('Load error:', err);
       this.hideLoading();
+      Auth.setLoading(false); // Reset button state if any
       Auth.showLogin();
+    } finally {
+      this._isLoadingAuth = false;
     }
   },
 
@@ -151,9 +161,9 @@ const App = {
     });
   },
 
-  navigate(view) {
+  navigate(view, param) {
     if (!this.views[view]) return;
-    if (view === 'cards') CardsView.selectedCard = null;
+    if (view === 'cards') CardsView.selectedCard = param || null;
     if (view === 'receivables') ReceivablesView.selectedPerson = null;
     if (view === 'planning') PlanningView.selectedProject = null;
     this.currentView = view;
