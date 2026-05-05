@@ -51,7 +51,7 @@ const ProfileView = {
       <section style="text-align:center;padding:20px 0">
         <div class="font-h fs-16 fw-700 text-gradient">Avança</div>
         <div class="fs-11 text-dim mt-4">Controle seu dinheiro. Organize sua rotina. Avance na vida.</div>
-        <div class="fs-11 text-dim mt-4">v2.0.0 — Online</div>
+        <div class="fs-11 text-dim mt-4">v2.1.1 — Online</div>
       </section>
     `;
   },
