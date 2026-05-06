@@ -249,6 +249,22 @@ const Finance = {
       }
     });
     return total;
+  },
+
+  getCardInvoiceForMonth(card, month, year) {
+    const expenses = this.getCardExpenses(card.id);
+    const items = [];
+    let total = 0;
+    expenses.forEach(e => {
+      if (e.installments) {
+        const baseInv = this.getInvoiceMonth(card.closing, card.due, e.date);
+        const diffMonths = (year - baseInv.year) * 12 + (month - baseInv.month);
+        if (diffMonths >= 0 && diffMonths < e.installments.total) {
+          items.push({ ...e, invoiceAmount: e.installments.amount, installmentN: diffMonths + 1 });
+          total += e.installments.amount;
+        }
+      } else {
+        const inv = this.getInvoiceMonth(card.closing, card.due, e.date);
         if (inv.month === month && inv.year === year) {
           items.push({ ...e, invoiceAmount: e.amount });
           total += e.amount;

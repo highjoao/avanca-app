@@ -74,7 +74,7 @@ const Auth = {
           <button class="auth-link" onclick="Auth.showCodeGate()">Criar conta</button>
         </div>
       </div>
-      <div style="position: fixed; bottom: 8px; right: 8px; font-size: 9px; color: var(--text-3); opacity: 0.5; z-index: 1000;">v.2.1.1</div>
+      <div style="position: fixed; bottom: 8px; right: 8px; font-size: 9px; color: var(--text-3); opacity: 0.5; z-index: 1000;">v.2.1.2</div>
     `;
     // Submit on Enter
     container.querySelectorAll('input').forEach(input => {
