@@ -156,8 +156,7 @@ const CardsView = {
         <div class="flex justify-between"><span class="text-muted fs-14">Data</span><span class="fw-500">${Finance.dateFull(e.date)}</span></div>
         <div class="flex justify-between"><span class="text-muted fs-14">Pagamento</span><span class="fw-500">${e.payment}${card?' · '+card.name:''}</span></div>
         <div class="flex justify-between"><span class="text-muted fs-14">Categoria</span><span class="fw-500">${e.category}</span></div>
-        ${e.installments?`<div class="flex justify-between"><span class="text-muted fs-14">Parcelas</span><span class="fw-500">${e.installments.current}/${e.installments.total}x de ${Finance.currency(e.installments.amount)}</span></div>
-        ${UI.progress(Finance.percent(e.installments.current, e.installments.total), 'purple')}`:''}
+        ${e.installments?`<div class="flex justify-between"><span class="text-muted fs-14">Parcelas</span><span class="fw-500">${e.installments.total}x de ${Finance.currency(e.installments.amount)}</span></div>`:''}
         ${e.desc?`<div class="flex justify-between"><span class="text-muted fs-14">Obs</span><span class="fw-500">${e.desc}</span></div>`:''}
       </div>
       <div class="modal-actions">
@@ -184,7 +183,6 @@ const CardsView = {
       ${e.installments ? `
         <div class="form-row">
           ${UI.formField('Total parcelas','exped-inst-total','number',{value:e.installments.total, min:'1'})}
-          ${UI.formField('Parcela atual','exped-inst-current','number',{value:e.installments.current, min:'1'})}
         </div>
       ` : ''}
       ${UI.formField('Observação','exped-desc','text',{value:e.desc||'', placeholder:'Opcional'})}
@@ -205,8 +203,7 @@ const CardsView = {
     const updates = { name, amount, date, category: UI.getVal('exped-category'), desc: UI.getVal('exped-desc') };
     if (e.installments) {
       const total = UI.getNum('exped-inst-total') || e.installments.total;
-      const current = UI.getNum('exped-inst-current') || e.installments.current;
-      updates.installments = { total, current, amount: Math.round((amount/total)*100)/100 };
+      updates.installments = { total, amount: Math.round((amount/total)*100)/100 };
     }
     DB.updateItem('expenses', expId, updates);
     UI.modal.hide(); UI.toast('Gasto atualizado!'); App.refresh();
@@ -234,9 +231,8 @@ const CardsView = {
         <label class="form-label">Parcelamento</label>
         <div class="form-row">
           ${UI.formField('Total de parcelas','cexp-inst-total','number',{placeholder:'1 = à vista', min:'1'})}
-          ${UI.formField('Parcela atual','cexp-inst-current','number',{placeholder:'Em qual parcela está?', min:'1'})}
         </div>
-        <div class="form-hint">Para compras antigas, informe a parcela atual. Ex: 6x, parcela 4 = já pagou 3.</div>
+        <div class="form-hint">O sistema posicionará cada parcela automaticamente nos meses corretos baseando-se na data da compra.</div>
       </div>
       ${UI.formField('Observação','cexp-desc','text',{placeholder:'Opcional'})}
       <div class="modal-actions">
@@ -254,7 +250,6 @@ const CardsView = {
 
     const category = UI.getVal('cexp-category');
     const totalInst = UI.getNum('cexp-inst-total') || 1;
-    const currentInst = UI.getNum('cexp-inst-current') || 1;
 
     const item = {
       name, amount, date, payment: 'credit', card: cardId,
@@ -264,7 +259,6 @@ const CardsView = {
     if (totalInst > 1) {
       item.installments = {
         total: totalInst,
-        current: Math.min(currentInst, totalInst),
         amount: Math.round((amount / totalInst) * 100) / 100
       };
     }

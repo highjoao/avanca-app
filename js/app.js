@@ -56,6 +56,9 @@ const App = {
       // Load user data from Supabase
       await DB.init(user.id);
 
+      // Run silent data migration
+      this.runCardDataMigration();
+
       // Set user avatar
       const data = DB.get();
       document.getElementById('header-avatar').textContent = (data.user.name || Auth.currentUser.email?.[0] || 'U').charAt(0).toUpperCase();
@@ -85,6 +88,30 @@ const App = {
       Auth.showLogin();
     } finally {
       this._isLoadingAuth = false;
+    }
+  },
+
+  runCardDataMigration() {
+    const data = DB.get();
+    let changed = false;
+
+    // Fix paid invoice amounts to match the new mathematical calculation
+    data.expenses.forEach(e => {
+      if (e.payment === 'fatura' && e.card) {
+        const c = data.cards.find(x => x.id === e.card);
+        if (c) {
+          const payDate = new Date(e.date + 'T12:00:00');
+          const correctAmount = Finance.getCardInvoiceAmount(c, payDate.getMonth(), payDate.getFullYear());
+          if (correctAmount > 0 && e.amount !== correctAmount) {
+            e.amount = correctAmount;
+            changed = true;
+          }
+        }
+      }
+    });
+
+    if (changed) {
+      DB.save(data);
     }
   },
 

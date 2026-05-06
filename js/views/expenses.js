@@ -1,18 +1,35 @@
 /* ===== EXPENSES VIEW — WITH EDIT/DELETE ===== */
 const ExpensesView = {
   filter: 'all',
+  dateFilter: 'current-month',
 
   render() {
     const data = DB.get();
+    
+    // 1. Sort by date desc
     let expenses = [...data.expenses].sort((a,b) => b.date.localeCompare(a.date));
+    
+    // 2. Filter by date
+    expenses = Finance.filterByDate(expenses, this.dateFilter);
+    
+    // 3. Calc totals
     const total = expenses.reduce((s,e) => s+e.amount, 0);
     const avg = expenses.length > 0 ? total / Math.max(1, new Set(expenses.map(e=>e.date)).size) : 0;
     const cats = {}; expenses.forEach(e => { cats[e.category] = (cats[e.category]||0) + e.amount; });
     const topCat = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+    
+    // 4. Filter by payment method
     if (this.filter !== 'all') expenses = expenses.filter(e => e.payment === this.filter);
 
     return `
-      <section><h2 class="font-h fs-24 fw-700">Gastos</h2><p class="fs-14 text-muted mt-4">Controle suas saídas</p></section>
+      <section>
+        <div class="flex justify-between items-center mb-16">
+          <div><h2 class="font-h fs-24 fw-700">Gastos</h2><p class="fs-14 text-muted mt-4">Controle suas saídas</p></div>
+          <select class="form-input" style="width:140px;height:36px;font-size:13px" onchange="ExpensesView.setDateFilter(this.value)">
+            ${UI.dateFilterOptions(this.dateFilter)}
+          </select>
+        </div>
+      </section>
       <section class="glass">
         <div class="summary-label">TOTAL GASTO</div>
         <div class="font-h fs-28 fw-700 text-danger mt-4">${Finance.currency(total)}</div>
@@ -46,6 +63,7 @@ const ExpensesView = {
     });
   },
 
+  setDateFilter(val) { this.dateFilter = val; App.refresh(); },
   setFilter(f) { this.filter = f; App.refresh(); },
 
   showDetail(id) {

@@ -174,19 +174,30 @@ const Finance = {
   },
 
   // Credit card invoice logic
-  getInvoiceMonth(cardClosing, purchaseDate) {
+  getInvoiceMonth(cardClosing, cardDue, purchaseDate) {
     const d = new Date(purchaseDate + 'T12:00:00');
-    const day = d.getDate();
-    let m = d.getMonth(), y = d.getFullYear();
-    if (day >= cardClosing) { m++; if (m > 11) { m = 0; y++; } }
+    let day = d.getDate();
+    let m = d.getMonth();
+    let y = d.getFullYear();
+
+    // Closing month logic:
+    if (day >= cardClosing) {
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+
+    // Due month logic:
+    if (cardDue <= cardClosing) {
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+
     return { month: m, year: y };
   },
 
   getInvoiceDueDate(cardClosing, cardDue, purchaseDate) {
-    const inv = this.getInvoiceMonth(cardClosing, purchaseDate);
-    let dueM = inv.month, dueY = inv.year;
-    if (cardDue <= cardClosing) { dueM++; if (dueM > 11) { dueM = 0; dueY++; } }
-    return new Date(dueY, dueM, cardDue).toISOString().split('T')[0];
+    const inv = this.getInvoiceMonth(cardClosing, cardDue, purchaseDate);
+    return new Date(inv.year, inv.month, cardDue).toISOString().split('T')[0];
   },
 
   calcInterest(principal, interest, daysOverdue) {
@@ -227,54 +238,32 @@ const Finance = {
     let total = 0;
     expenses.forEach(e => {
       if (e.installments) {
-        // installment: check if any installment falls in this month
-        const inst = e.installments;
-        const purchaseDate = new Date(e.date + 'T12:00:00');
-        for (let i = inst.current - 1; i < inst.total; i++) {
-          const d = new Date(purchaseDate);
-          d.setMonth(d.getMonth() + (i - (inst.current - 1)));
-          const invM = this.getInvoiceMonth(card.closing, d.toISOString().split('T')[0]);
-          if (invM.month === m && invM.year === y) { total += inst.amount; break; }
+        const baseInv = this.getInvoiceMonth(card.closing, card.due, e.date);
+        const diffMonths = (y - baseInv.year) * 12 + (m - baseInv.month);
+        if (diffMonths >= 0 && diffMonths < e.installments.total) {
+          total += e.installments.amount;
         }
       } else {
-        const inv = this.getInvoiceMonth(card.closing, e.date);
+        const inv = this.getInvoiceMonth(card.closing, card.due, e.date);
         if (inv.month === m && inv.year === y) total += e.amount;
       }
     });
     return total;
-  },
-
-  getCardInvoiceForMonth(card, month, year) {
-    const expenses = this.getCardExpenses(card.id);
-    const items = [];
-    expenses.forEach(e => {
-      if (e.installments) {
-        const inst = e.installments;
-        const purchaseDate = new Date(e.date + 'T12:00:00');
-        for (let i = inst.current - 1; i < inst.total; i++) {
-          const d = new Date(purchaseDate);
-          d.setMonth(d.getMonth() + (i - (inst.current - 1)));
-          const invM = this.getInvoiceMonth(card.closing, d.toISOString().split('T')[0]);
-          if (invM.month === month && invM.year === year) {
-            items.push({ ...e, invoiceAmount: inst.amount, installmentN: i + 1 });
-            break;
-          }
+        if (inv.month === month && inv.year === year) {
+          items.push({ ...e, invoiceAmount: e.amount });
+          total += e.amount;
         }
-      } else {
-        const inv = this.getInvoiceMonth(card.closing, e.date);
-        if (inv.month === month && inv.year === year) items.push({ ...e, invoiceAmount: e.amount });
       }
     });
-    const total = items.reduce((s, i) => s + i.invoiceAmount, 0);
-    return { items, total };
+    // Sort items so newest purchase date appears first
+    items.sort((a, b) => b.date.localeCompare(a.date));
+    return { total, items };
   },
 
-  getCardInvoiceTimeline(card, monthsBefore, monthsAfter) {
-    const before = monthsBefore || 2;
-    const after = monthsAfter || 4;
+  getCardInvoiceTimeline(card, monthsBefore = 2, monthsAfter = 4) {
     const now = new Date();
     const timeline = [];
-    for (let i = -before; i <= after; i++) {
+    for (let i = -monthsBefore; i <= monthsAfter; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const m = d.getMonth(), y = d.getFullYear();
       const total = this.getCardInvoiceAmount(card, m, y);
